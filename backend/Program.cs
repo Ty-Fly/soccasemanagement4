@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using backend.Models;
 using backend.Data;
 
@@ -15,6 +17,14 @@ var connectionString = builder.Configuration.GetConnectionString("Default") ??
 // Adds database connection on the default connection string
 builder.Services.AddDbContext<SocDbContext>(options =>
     options.UseSqlServer(connectionString));
+
+// Adds the authentication packages to the runtime
+// from: https://learn.microsoft.com/en-us/aspnet/core/security/authentication
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme,
+        options => builder.Configuration.Bind("JwtSettings", options))
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme,
+        options => builder.Configuration.Bind("CookieSettings", options));
 
 var app = builder.Build();
 
