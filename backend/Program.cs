@@ -8,9 +8,13 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-// Adds database connection on the default connection string (specified in appsettings.json)
+// Creates the DB connection string from appsettings.json
+var connectionString = builder.Configuration.GetConnectionString("Default") ??
+    throw new InvalidOperationException("Connectionstring SQL is niet aanwezig. Check appsettings.json.");
+
+// Adds database connection on the default connection string
 builder.Services.AddDbContext<SocDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
+    options.UseSqlServer(connectionString));
 
 var app = builder.Build();
 
@@ -18,6 +22,8 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
