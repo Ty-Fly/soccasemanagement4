@@ -18,7 +18,7 @@ var connectionString = builder.Configuration.GetConnectionString("Default") ??
 builder.Services.AddDbContext<SocDbContext>(options =>
     options.UseSqlServer(connectionString));
 
-// Adds the authentication packages to the runtime
+// Adds the authentication services to the runtime
 // from: https://learn.microsoft.com/en-us/aspnet/core/security/authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme,
