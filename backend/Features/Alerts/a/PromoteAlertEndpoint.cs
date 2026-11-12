@@ -9,7 +9,7 @@ namespace backend.Features.Alerts;
 
 public static class PromoteAlertEndpoint
 {
-    public const string InitialNistStatus = "Detectie en analyse";
+    public const Case.CaseStatus InitialNistStatus = Case.CaseStatus.DetectieEnAnalyse;
 
     public sealed record PromoteAlertResponse(
         int CaseId,
@@ -89,7 +89,7 @@ public static class PromoteAlertEndpoint
             alert.Id,
             newCase.TenantId,
             newCase.Title,
-            newCase.Status,
+            newCase.Status.ToString(),
             newCase.SlaStartAt,
             newCase.SlaDeadlineAt
         );
