@@ -16,6 +16,8 @@ public sealed class SocDbContext : DbContext
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<User> Users => Set<User>();
 
+    public DbSet<HandoverReport> HandoverReports => Set<HandoverReport>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Applies all configurations from the files in "Configurations" folder

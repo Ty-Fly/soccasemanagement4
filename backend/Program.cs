@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using backend.Models;
 using backend.Data;
+using backend.Features.HandoverReports;
 using backend.Hubs;
 using backend.Features.Alerts;
 using backend.Services.MultiTenancy;
@@ -58,6 +59,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.MapGetHandoverReport();
+app.MapCreateHandoverReport();
+app.Run();
 app.UseAuthentication();
 app.UseAuthorization();
 
