@@ -64,5 +64,6 @@ app.UseAuthorization();
 // Hubs & Feature Endpoints
 app.MapHub<SocHub>("/hubs/soc");
 app.MapCloseAlertEndpoint();
+app.MapPromoteAlertEndpoint();
 
 app.Run();
