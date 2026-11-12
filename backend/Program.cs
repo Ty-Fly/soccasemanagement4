@@ -35,18 +35,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options => builder.Configuration.Bind("JwtSettings", options))
     .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme,
         options => builder.Configuration.Bind("CookieSettings", options));
-
-// RBAC Policies (US-03 & US-07)
+// RBAC Policies (US-03)
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("EmployeeOnly", policy =>
-        policy.RequireAuthenticatedUser()
-              .RequireRole(
-                  nameof(User.UserRole.Analyst),
-                  nameof(User.UserRole.SecurityEngineer),
-                  nameof(User.UserRole.Manager),
-                  nameof(User.UserRole.AccountManager)
-              ));
+        policy.RequireRole(
+            nameof(User.UserRole.Analyst),
+            nameof(User.UserRole.SecurityEngineer),
+            nameof(User.UserRole.Manager),
+            nameof(User.UserRole.AccountManager)));
+
+    options.AddPolicy("RequireManager", policy =>
+        policy.RequireRole(nameof(User.UserRole.Manager)));
+
+    options.AddPolicy("ClientOnly", policy =>
+        policy.RequireRole(nameof(User.UserRole.Client)));
 });
 
 var app = builder.Build();
@@ -59,16 +62,17 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.MapGetHandoverReport();
-app.MapCreateHandoverReport();
-app.Run();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Hubs & Feature Endpoints
+// Hubs
 app.MapHub<SocHub>("/hubs/soc");
+
+// Feature endpoints
 app.MapCloseAlertEndpoint();
 app.MapPromoteAlertEndpoint();
 app.MapLinkAlertEndpoints();
+app.MapGetHandoverReport();
+app.MapCreateHandoverReport();
 
 app.Run();
