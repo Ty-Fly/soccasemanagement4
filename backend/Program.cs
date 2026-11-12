@@ -4,32 +4,53 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using backend.Models;
 using backend.Data;
 using backend.Features.HandoverReports;
+using backend.Hubs;
+using backend.Features.Alerts;
+using backend.Services.MultiTenancy;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+// OpenAPI & Swagger
 builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
-// Creates the DB connection string from appsettings.json
+// SignalR voor realtime updates (< 5 sec, NFR-03)
+builder.Services.AddSignalR();
+
+// Multitenancy services
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
+
+// Database verbinding
 var connectionString = builder.Configuration.GetConnectionString("Default") ??
     throw new InvalidOperationException("Connectionstring SQL is niet aanwezig. Check appsettings.json.");
 
-// Adds database connection on the default connection string
 builder.Services.AddDbContext<SocDbContext>(options =>
     options.UseSqlServer(connectionString));
 
-// Adds the authentication services to the runtime
-// from: https://learn.microsoft.com/en-us/aspnet/core/security/authentication
+// Authenticatie
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme,
         options => builder.Configuration.Bind("JwtSettings", options))
     .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme,
         options => builder.Configuration.Bind("CookieSettings", options));
 
+// RBAC Policies (US-03 & US-07)
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("EmployeeOnly", policy =>
+        policy.RequireAuthenticatedUser()
+              .RequireRole(
+                  nameof(User.UserRole.Analyst),
+                  nameof(User.UserRole.SecurityEngineer),
+                  nameof(User.UserRole.Manager),
+                  nameof(User.UserRole.AccountManager)
+              ));
+});
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -40,4 +61,14 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.MapGetHandoverReport();
 app.MapCreateHandoverReport();
+app.Run();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Hubs & Feature Endpoints
+app.MapHub<SocHub>("/hubs/soc");
+app.MapCloseAlertEndpoint();
+app.MapPromoteAlertEndpoint();
+app.MapLinkAlertEndpoints();
+
 app.Run();
