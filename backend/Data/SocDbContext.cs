@@ -19,6 +19,8 @@ public sealed class SocDbContext : DbContext
     public DbSet<HandoverReport> HandoverReports => Set<HandoverReport>();
     public DbSet<TimelineEntry> TimelineEntries => Set<TimelineEntry>();
 
+    //US05: Voor het opslaan van IngestApiKeys per klant/tentant
+    public DbSet<IngestApiKey> IngestApiKeys => Set<IngestApiKey>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Applies all configurations from the files in "Configurations" folder
