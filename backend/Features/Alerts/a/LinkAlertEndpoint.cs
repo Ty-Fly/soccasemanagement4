@@ -21,7 +21,7 @@ public static class LinkAlertEndpoint
             if (alert is null) return Results.NotFound();
 
             var cases = await db.Cases
-                .Where(c => c.TenantId == alert.TenantId && c.ClosedAt == null && c.Status != "Gesloten")
+                .Where(c => c.TenantId == alert.TenantId && c.ClosedAt == null && c.Status != Case.CaseStatus.Gesloten)
                 .Select(c => new { c.Id, c.Title, c.Status, c.SlaDeadlineAt })
                 .ToListAsync();
 
@@ -37,7 +37,7 @@ public static class LinkAlertEndpoint
             if (alert is null || targetCase is null) return Results.NotFound();
             if (alert.Status != Alert.AlertStatus.Open) return Results.Conflict("Alert is niet meer open.");
             if (alert.TenantId != targetCase.TenantId) return Results.BadRequest("Andere klant is niet toegestaan.");
-            if (targetCase.ClosedAt is not null || targetCase.Status == "Gesloten") return Results.Conflict("Case is al gesloten.");
+            if (targetCase.ClosedAt is not null || targetCase.Status == Case.CaseStatus.Gesloten) return Results.Conflict("Case is al gesloten.");
 
             alert.CaseId = targetCase.Id;
             alert.Status = Alert.AlertStatus.Linked;
@@ -57,7 +57,7 @@ public static class LinkAlertEndpoint
             if (targetCase.ClosedAt is not null) return Results.Conflict("Case is al gesloten.");
 
             var now = DateTime.UtcNow;
-            targetCase.Status = "Gesloten";
+            targetCase.Status = Case.CaseStatus.Gesloten;
             targetCase.IsFalsePositive = true;
             targetCase.ClosedAt = now;
 

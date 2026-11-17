@@ -1,6 +1,19 @@
 @backend_HostAddress = http://localhost:5251
 
-GET {{backend_HostAddress}}/weatherforecast/
-Accept: application/json
+### 1. Haal een dev-token op (alleen Development). Andere testaccounts: zie Data/Seed/DevDataSeeder.cs
+# @name devToken
+POST {{backend_HostAddress}}/api/dev/token
+Content-Type: application/json
+
+{ "email": "analist@soc.local" }
 
 ###
+@token = {{devToken.response.body.$.token}}
+
+### 2. Wie ben ik?
+GET {{backend_HostAddress}}/api/dev/me
+Authorization: Bearer {{token}}
+
+### 3. Alert promoveren tot case (US-08)
+POST {{backend_HostAddress}}/api/alerts/1/promote
+Authorization: Bearer {{token}}
