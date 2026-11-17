@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using backend.Models;
+using backend.Services.Ingest;
 
 namespace backend.Data.Seed;
 
@@ -58,5 +59,32 @@ public static class DevDataSeeder
             new Alert { TenantId = klantB.Id, Message = "Port scan vanaf extern adres", CreatedAt = now.AddMinutes(-45) });
 
         await db.SaveChangesAsync(ct);
+    }
+
+    // US-xx: API-keys voor de ingest API. ALLEEN DEVELOPMENT.
+    // Eigen controle (los van SeedAsync), zodat het ook werkt op databases die al gevuld zijn.
+    // Gebruik in de header:  X-Api-Key: dev-ingest-klant-a   (of dev-ingest-klant-b)
+    public static async Task SeedIngestKeysAsync(SocDbContext db, CancellationToken ct = default)
+    {
+        if (await db.IngestApiKeys.AnyAsync(ct))
+            return;
+
+        var tenants = await db.Tenants.OrderBy(t => t.Id).Take(2).ToListAsync(ct);
+        if (tenants.Count < 2)
+            return;
+
+        db.IngestApiKeys.AddRange(
+            NewKey(tenants[0].Id, "Simulator Klant A", "dev-ingest-klant-a"),
+            NewKey(tenants[1].Id, "Simulator Klant B", "dev-ingest-klant-b"));
+
+        await db.SaveChangesAsync(ct);
+
+        static IngestApiKey NewKey(int tenantId, string name, string key) => new()
+        {
+            TenantId = tenantId,
+            Name = name,
+            KeyHash = ApiKeyHasher.Hash(key),
+            CreatedAt = DateTime.UtcNow
+        };
     }
 }
