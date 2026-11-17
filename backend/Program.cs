@@ -147,7 +147,8 @@ if (app.Environment.IsDevelopment())
 app.MapCloseAlertEndpoint();
 app.MapPromoteAlertEndpoint();
 app.MapLinkAlertEndpoints();
-app.MapGetHandoverReport();
 app.MapCreateHandoverReport();
+app.MapCreateHandoverItem();
+app.MapGetActiveHandoverReport();
 
 app.Run();

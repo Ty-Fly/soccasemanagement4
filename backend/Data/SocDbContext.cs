@@ -18,6 +18,7 @@ public sealed class SocDbContext : DbContext
 
     public DbSet<HandoverReport> HandoverReports => Set<HandoverReport>();
     public DbSet<TimelineEntry> TimelineEntries => Set<TimelineEntry>();
+    public DbSet<HandoverItem> HandoverItems => Set<HandoverItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
