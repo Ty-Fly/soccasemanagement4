@@ -7,6 +7,7 @@ using backend.Features.HandoverReports;
 using backend.Hubs;
 using backend.Features.Alerts;
 using backend.Services.MultiTenancy;
+using backend.Features.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,5 +75,6 @@ app.MapPromoteAlertEndpoint();
 app.MapLinkAlertEndpoints();
 app.MapGetHandoverReport();
 app.MapCreateHandoverReport();
+app.MapLoginUser();
 
 app.Run();
