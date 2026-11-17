@@ -17,3 +17,60 @@ Authorization: Bearer {{token}}
 ### 3. Alert promoveren tot case (US-08)
 POST {{backend_HostAddress}}/api/alerts/1/promote
 Authorization: Bearer {{token}}
+
+
+### ===== US-xx: Ingest API =====
+### Alert insturen als SIEM van klant A -> 201
+POST {{backend_HostAddress}}/api/ingest/alerts
+X-Api-Key: dev-ingest-klant-a
+Content-Type: application/json
+
+{
+  "externalId": "SIEM-1001",
+  "title": "Verdachte login vanuit onbekend land",
+  "severity": "High",
+  "detectedAt": "2026-11-17T09:00:00Z",
+  "raw": { "user": "j.jansen", "ip": "203.0.113.10" }
+}
+
+### Exact hetzelfde nog een keer -> 200, duplicate = true
+POST {{backend_HostAddress}}/api/ingest/alerts
+X-Api-Key: dev-ingest-klant-a
+Content-Type: application/json
+
+{ "externalId": "SIEM-1001", "title": "Verdachte login vanuit onbekend land", "severity": "High" }
+
+### Proberen bij klant B te komen via de body -> tenantId blijft die van klant A
+POST {{backend_HostAddress}}/api/ingest/alerts
+X-Api-Key: dev-ingest-klant-a
+Content-Type: application/json
+
+{ "externalId": "SIEM-1002", "title": "Test tenant-scheiding", "tenantId": 2 }
+
+### Zonder key -> 401
+POST {{backend_HostAddress}}/api/ingest/alerts
+Content-Type: application/json
+
+{ "externalId": "SIEM-1003", "title": "Geen key" }
+
+### Met een analist-JWT in plaats van een key -> 401
+POST {{backend_HostAddress}}/api/ingest/alerts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "externalId": "SIEM-1004", "title": "Verkeerde soort login" }
+
+### Lege titel -> 400 met uitleg
+POST {{backend_HostAddress}}/api/ingest/alerts
+X-Api-Key: dev-ingest-klant-a
+Content-Type: application/json
+
+{ "externalId": "SIEM-1005", "title": "" }
+
+### API-key op een ander endpoint -> 401 (least privilege)
+PATCH {{backend_HostAddress}}/api/alerts/1/close
+X-Api-Key: dev-ingest-klant-a
+
+### Open alerts ophalen als analist
+GET {{backend_HostAddress}}/api/alerts?status=Open
+Authorization: Bearer {{token}}

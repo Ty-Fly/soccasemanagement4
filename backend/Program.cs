@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -13,6 +14,7 @@ using backend.Features.HandoverReports;
 using backend.Hubs;
 using backend.Features.Alerts;
 using backend.Services.MultiTenancy;
+using backend.Services.Ingest;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +35,19 @@ builder.Services.AddSwaggerGen(options =>
     {
         [new OpenApiSecuritySchemeReference("Bearer", document)] = []
     });
+
+    // US-xx: tweede "Authorize"-veld voor de API-key van externe bronnen
+    options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.ApiKey,
+        In = ParameterLocation.Header,
+        Name = IngestApiKeyHandler.HeaderName,
+        Description = "Voor /api/ingest. In Development: dev-ingest-klant-a of dev-ingest-klant-b."
+    });
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("ApiKey", document)] = []
+    });
 });
 
 // Enums als tekst in JSON ("Containment" i.p.v. 1)
@@ -48,6 +63,18 @@ builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
 
 // Gedeelde tijdlijn voor cases
 builder.Services.AddScoped<ITimelineService, TimelineService>();
+
+// US-xx: ingest van alerts uit externe bronnen
+builder.Services.AddScoped<IIngestService, IngestService>();
+
+// US-xx: CORS voor de frontend. SignalR vanuit de browser vereist een vaste origin + AllowCredentials
+// (een wildcard * is niet toegestaan). Origin instelbaar via "Frontend:Origin" in appsettings.
+var frontendOrigin = builder.Configuration["Frontend:Origin"] ?? "http://localhost:5173";
+builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
+    .WithOrigins(frontendOrigin)
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials()));
 
 // Database verbinding
 var connectionString = builder.Configuration.GetConnectionString("Default") ??
@@ -88,7 +115,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 return Task.CompletedTask;
             }
         };
-    });
+    })
+    // US-xx: tweede scheme voor externe bronnen (header X-Api-Key). JWT blijft de standaard.
+    .AddScheme<AuthenticationSchemeOptions, IngestApiKeyHandler>(IngestApiKeyHandler.SchemeName, _ => { });
 
 // RBAC Policies (US-03)
 builder.Services.AddAuthorization(options =>
@@ -105,6 +134,12 @@ builder.Services.AddAuthorization(options =>
 
     options.AddPolicy("ClientOnly", policy =>
         policy.RequireRole(nameof(User.UserRole.Client)));
+
+    // US-xx: alleen API-keys, en alleen op ingest-endpoints.
+    // Een JWT werkt hier niet, en een API-key werkt nergens anders.
+    options.AddPolicy("IngestOnly", policy => policy
+        .AddAuthenticationSchemes(IngestApiKeyHandler.SchemeName)
+        .RequireRole(IngestApiKeyHandler.Role));
 });
 
 var app = builder.Build();
@@ -115,6 +150,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 
+    // US-xx: dev-testpagina voor SignalR op /dev/signalr-test.html
+    app.UseStaticFiles();
+
     // Database bijwerken en (als die leeg is) testdata toevoegen
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<SocDbContext>();
@@ -122,6 +160,7 @@ if (app.Environment.IsDevelopment())
     {
         await db.Database.MigrateAsync();
         await DevDataSeeder.SeedAsync(db);
+        await DevDataSeeder.SeedIngestKeysAsync(db);   // US-xx
     }
     catch (Exception ex)
     {
@@ -130,6 +169,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("Frontend");   // US-xx: vóór authenticatie
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -149,5 +189,7 @@ app.MapPromoteAlertEndpoint();
 app.MapLinkAlertEndpoints();
 app.MapGetHandoverReport();
 app.MapCreateHandoverReport();
+app.MapIngestAlertEndpoint();   // US-xx
+app.MapGetAlertsEndpoint();     // US-xx
 
 app.Run();
