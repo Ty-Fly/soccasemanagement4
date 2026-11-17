@@ -19,7 +19,7 @@ public static class JwtTokenGenerator
 
         // Create the token
         // Temporary secret key for signing the token. In production, use a secure key from configuration.
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("YourSecretKeyHere"));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("YourSecretKeyHereYourSecretKeyHereYourSecretKeyHere"));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(

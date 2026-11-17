@@ -4,7 +4,6 @@ using backend.Services.Authentication;
 using BCrypt.Net;
 using Microsoft.EntityFrameworkCore;
 
-
 namespace backend.Features.Authentication;
 
 public static class LoginUserEndpoint
