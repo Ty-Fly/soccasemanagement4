@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>SignalR test (dev)</title></head>
+<body style="font-family: sans-serif">
+  <h3>SignalR test: /hubs/soc</h3>
+  <p>Open deze pagina twee keer: als <code>analist@soc.local</code> en als <code>klant-a@klant.local</code>.
+     Alleen de analist hoort <code>AlertReceived</code> te zien.</p>
+  <input id="email" value="analist@soc.local" size="30">
+  <button id="connect">Verbind</button>
+  <pre id="log" style="background:#f4f4f4; padding:8px; min-height:200px"></pre>
+
+  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+  <script>
+    const logEl = document.getElementById('log');
+    const log = msg => logEl.textContent = `${new Date().toLocaleTimeString()}  ${msg}\n` + logEl.textContent;
+
+    document.getElementById('connect').onclick = async () => {
+      const email = document.getElementById('email').value;
+
+      // 1. Dev-token ophalen (zelfde als in Swagger)
+      const res = await fetch('/api/dev/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      if (!res.ok) return log(`Token ophalen mislukt (${res.status})`);
+      const { token } = await res.json();
+
+      // 2. Verbinden. Het token gaat via ?access_token=, zie OnMessageReceived in Program.cs
+      const connection = new signalR.HubConnectionBuilder()
+        .withUrl('/hubs/soc', { accessTokenFactory: () => token })
+        .withAutomaticReconnect()
+        .build();
+
+      // 3. Op alle events luisteren (namen: zie Hubs/SocHubEvents.cs)
+      for (const ev of ['AlertReceived', 'AlertClosed', 'AlertPromoted', 'AlertLinked', 'CaseCreated', 'CaseClosed'])
+        connection.on(ev, data => log(`${ev}: ${JSON.stringify(data)}`));
+
+      try {
+        await connection.start();
+        log(`Verbonden als ${email}`);
+      } catch (err) {
+        log(`Verbinden mislukt: ${err}`);
+      }
+    };
+  </script>
+</body>
+</html>
