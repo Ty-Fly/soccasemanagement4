@@ -1,38 +1,138 @@
+
 using Microsoft.EntityFrameworkCore;
 using backend.Models;
 
 namespace backend.Data.Seed;
 
-/// <summary>
-/// Vult een LEGE development-database met een beetje fictieve testdata.
-/// Draait alleen in Development (zie Program.cs).
-///
-/// Testaccounts (token ophalen via POST /api/dev/token met alleen het e-mailadres):
-///   analist@soc.local, engineer@soc.local, manager@soc.local, accountmanager@soc.local,
-///   klant-a@klant.local (Klant A), klant-b@klant.local (Klant B)
-///
-/// Testdata nodig voor je eigen story? Voeg die onderaan toe, in een eigen blok met // US-xx.
-/// </summary>
 public static class DevDataSeeder
 {
-    public static async Task SeedAsync(SocDbContext db, CancellationToken ct = default)
+    public static async Task SeedAsync(
+        SocDbContext db,
+        CancellationToken ct = default)
     {
-        if (await db.Tenants.AnyAsync(ct))
-            return;
+        // Klanten ophalen of aanmaken
+        var klantA = await db.Tenants.FirstOrDefaultAsync(
+            t => t.Name == "Klant A - Gemeente Voorbeeldstad", ct);
 
+        if (klantA == null)
+        {
+            klantA = new Tenant
+            {
+                Name = "Klant A - Gemeente Voorbeeldstad"
+            };
+
+            db.Tenants.Add(klantA);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var klantB = await db.Tenants.FirstOrDefaultAsync(
+            t => t.Name == "Klant B - Zorggroep Demo", ct);
+
+        if (klantB == null)
+        {
+            klantB = new Tenant
+            {
+                Name = "Klant B - Zorggroep Demo"
+            };
+
+            db.Tenants.Add(klantB);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var klantC = await db.Tenants.FirstOrDefaultAsync(
+            t => t.Name == "Klant C - Testorganisatie", ct);
+
+        if (klantC == null)
+        {
+            klantC = new Tenant
+            {
+                Name = "Klant C - Testorganisatie"
+            };
+
+            db.Tenants.Add(klantC);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Testgebruikers aanmaken als ze nog niet bestaan
+        await AddUserIfMissing(
+            db, "Anna Analist", "analist@soc.local",
+            User.UserRole.Analyst, 0, ct);
+
+        await AddUserIfMissing(
+            db, "Erik Engineer", "engineer@soc.local",
+            User.UserRole.SecurityEngineer, 0, ct);
+
+        await AddUserIfMissing(
+            db, "Maria Manager", "manager@soc.local",
+            User.UserRole.Manager, 0, ct);
+
+        await AddUserIfMissing(
+            db, "Arjen Accountmanager", "accountmanager@soc.local",
+            User.UserRole.AccountManager, 0, ct);
+
+        await AddUserIfMissing(
+            db, "Klant A Viewer", "klant-a@klant.local",
+            User.UserRole.Client, klantA.Id, ct);
+
+        await AddUserIfMissing(
+            db, "Klant B Viewer", "klant-b@klant.local",
+            User.UserRole.Client, klantB.Id, ct);
+
+        await AddUserIfMissing(
+            db, "Klant C Viewer", "klant-c@klant.local",
+            User.UserRole.Client, klantC.Id, ct);
+
+        // Testalerts aanmaken als ze nog niet bestaan
         var now = DateTime.UtcNow;
 
-        // --- Klanten (fictief) ---
-        var klantA = new Tenant { Name = "Klant A - Gemeente Voorbeeldstad" };
-        var klantB = new Tenant { Name = "Klant B - Zorggroep Demo" };
-        db.Tenants.AddRange(klantA, klantB);
-        await db.SaveChangesAsync(ct);
+        await AddAlertIfMissing(
+            db, klantA.Id,
+            "Verdachte inlogpogingen op VPN-gateway",
+            now.AddMinutes(-5), ct);
 
-        // --- Gebruikers per rol ---
-        // PasswordHash is een placeholder: echte login en hashing zijn US-02 (Kuray).
-        // Medewerkers hebben (nog) TenantId 0: hoe medewerkers en klanten gescheiden
-        // worden is uitwerking van US-01 (Kuray).
-        User NewUser(string name, string email, User.UserRole role, int tenantId = 0) => new()
+        await AddAlertIfMissing(
+            db, klantA.Id,
+            "Phishing-link aangeklikt door medewerker",
+            now.AddMinutes(-12), ct);
+
+        await AddAlertIfMissing(
+            db, klantA.Id,
+            "Onbekend PowerShell-script uitgevoerd",
+            now.AddMinutes(-30), ct);
+
+        await AddAlertIfMissing(
+            db, klantB.Id,
+            "Meerdere mislukte logins op beheeraccount",
+            now.AddMinutes(-8), ct);
+
+        await AddAlertIfMissing(
+            db, klantB.Id,
+            "Port scan vanaf extern adres",
+            now.AddMinutes(-45), ct);
+
+        await AddAlertIfMissing(
+            db, klantC.Id,
+            "Verdachte netwerkverbinding",
+            now.AddMinutes(-10), ct);
+    }
+
+    private static async Task AddUserIfMissing(
+        SocDbContext db,
+        string name,
+        string email,
+        User.UserRole role,
+        int tenantId,
+        CancellationToken ct)
+    {
+        var existingUser = await db.Users.FirstOrDefaultAsync(
+            u => u.Email == email, ct);
+
+        if (existingUser != null)
+        {
+            return;
+        }
+
+        var user = new User
         {
             Name = name,
             Email = email,
@@ -41,22 +141,33 @@ public static class DevDataSeeder
             PasswordHash = "DEV-SEED-GEEN-WACHTWOORD"
         };
 
-        db.Users.AddRange(
-            NewUser("Anna Analist", "analist@soc.local", User.UserRole.Analyst),
-            NewUser("Erik Engineer", "engineer@soc.local", User.UserRole.SecurityEngineer),
-            NewUser("Maria Manager", "manager@soc.local", User.UserRole.Manager),
-            NewUser("Arjen Accountmanager", "accountmanager@soc.local", User.UserRole.AccountManager),
-            NewUser("Klant A Viewer", "klant-a@klant.local", User.UserRole.Client, klantA.Id),
-            NewUser("Klant B Viewer", "klant-b@klant.local", User.UserRole.Client, klantB.Id));
+        db.Users.Add(user);
+        await db.SaveChangesAsync(ct);
+    }
 
-        // --- Open alerts ---
-        db.Alerts.AddRange(
-            new Alert { TenantId = klantA.Id, Message = "Verdachte inlogpogingen op VPN-gateway", CreatedAt = now.AddMinutes(-5) },
-            new Alert { TenantId = klantA.Id, Message = "Phishing-link aangeklikt door medewerker", CreatedAt = now.AddMinutes(-12) },
-            new Alert { TenantId = klantA.Id, Message = "Onbekend PowerShell-script uitgevoerd", CreatedAt = now.AddMinutes(-30) },
-            new Alert { TenantId = klantB.Id, Message = "Meerdere mislukte logins op beheeraccount", CreatedAt = now.AddMinutes(-8) },
-            new Alert { TenantId = klantB.Id, Message = "Port scan vanaf extern adres", CreatedAt = now.AddMinutes(-45) });
+    private static async Task AddAlertIfMissing(
+        SocDbContext db,
+        int tenantId,
+        string message,
+        DateTime createdAt,
+        CancellationToken ct)
+    {
+        var existingAlert = await db.Alerts.FirstOrDefaultAsync(
+            a => a.TenantId == tenantId && a.Message == message, ct);
 
+        if (existingAlert != null)
+        {
+            return;
+        }
+
+        var alert = new Alert
+        {
+            TenantId = tenantId,
+            Message = message,
+            CreatedAt = createdAt
+        };
+
+        db.Alerts.Add(alert);
         await db.SaveChangesAsync(ct);
     }
 }
