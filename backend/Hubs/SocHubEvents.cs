@@ -6,7 +6,7 @@ namespace backend.Hubs;
 /// </summary>
 public static class SocHubEvents
 {
-    public const string AlertReceived = "AlertReceived";  // US-xx
+    public const string AlertReceived = "AlertReceived";  // US-05
     public const string AlertClosed   = "AlertClosed";    // US-07
     public const string AlertPromoted = "AlertPromoted";  // US-08
     public const string AlertLinked   = "AlertLinked";    // US-09
