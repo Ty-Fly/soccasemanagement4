@@ -13,6 +13,7 @@ using backend.Features.HandoverReports;
 using backend.Hubs;
 using backend.Features.Alerts;
 using backend.Services.MultiTenancy;
+using backend.Features.Cases;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -144,10 +145,13 @@ if (app.Environment.IsDevelopment())
 }
 
 // Feature endpoints
+
 app.MapCloseAlertEndpoint();
 app.MapPromoteAlertEndpoint();
 app.MapLinkAlertEndpoints();
 app.MapGetHandoverReport();
 app.MapCreateHandoverReport();
+app.MapAssignCaseEndpoints();
+
 
 app.Run();
