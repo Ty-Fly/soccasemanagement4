@@ -28,6 +28,7 @@ public sealed class TotpAuthenticator
     // Returns the counter if a match is found, or null if no match is found.
     public long? FindMatchingCounter(string secret, string code)
     {
+        // Validates the code format: it must be exactly 6 digits.
         if (code.Length != 6 || code.Any(character => character is < '0' or > '9'))
         {
             return null;
