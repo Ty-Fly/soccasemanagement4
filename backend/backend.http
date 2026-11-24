@@ -1,6 +1,34 @@
-@backend_HostAddress = http://localhost:5251
+@backend_HostAddress = https://localhost:7181
+@email = user@example.com
+@password = ReplaceWithAUniquePassword123
+@authenticatorCode = 000000
 
-GET {{backend_HostAddress}}/weatherforecast/
-Accept: application/json
+### Start 2FA enrollment for an account pre-provisioned in the database.
+POST {{backend_HostAddress}}/api/register
+Content-Type: application/json
 
-###
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Confirm authenticator setup using the current six-digit code.
+POST {{backend_HostAddress}}/api/register/verify
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "code": "{{authenticatorCode}}"
+}
+
+### Log in with both password and authenticator code.
+# Use a fresh code from the next time window; verification codes cannot be reused.
+POST {{backend_HostAddress}}/api/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "code": "{{authenticatorCode}}"
+}

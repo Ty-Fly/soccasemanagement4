@@ -22,5 +22,11 @@ public sealed class SocDbContext : DbContext
     {
         // Applies all configurations from the files in "Configurations" folder
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(SocDbContext).Assembly);
+        modelBuilder.Entity<User>()
+            .HasIndex(user => user.Email)
+            .IsUnique();
+        modelBuilder.Entity<User>()
+            .Property(user => user.LastTwoFactorCounter)
+            .HasDefaultValue(-1L);
     }
 }
