@@ -31,6 +31,7 @@ public static class RegisterUserEndpoint
                 });
             }
 
+            // Cleans up email (NFR-01) and looks up the user in the database
             var email = AuthenticationEndpointHelpers.NormalizeEmail(request.Email);
             var user = await db.Users.SingleOrDefaultAsync(
                 user => user.Email == email,
@@ -50,10 +51,12 @@ public static class RegisterUserEndpoint
                 });
             }
 
+            // If the user has a TOTP secret, unprotect it; otherwise, create a new one
             var secret = user.TwoFactorSecretProtected is null
                 ? totp.CreateSecret()
                 : totp.Unprotect(user.TwoFactorSecretProtected);
 
+            /// If the user does not have a TOTP secret, protect and store it in the database
             if (user.TwoFactorSecretProtected is null)
             {
                 var updated = await db.Users

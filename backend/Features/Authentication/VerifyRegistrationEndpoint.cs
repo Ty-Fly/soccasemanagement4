@@ -23,11 +23,13 @@ public static class VerifyRegistrationEndpoint
                 return TypedResults.Unauthorized();
             }
 
+            // Cleans up email (NFR-01) and looks up the user in the database
             var email = AuthenticationEndpointHelpers.NormalizeEmail(request.Email);
             var user = await db.Users.SingleOrDefaultAsync(
                 candidate => candidate.Email == email,
                 cancellationToken);
 
+            // if anything goes wrong, the user should not be able to log in, so we return "Unauthorized"
             if (user is null
                 || user.TwoFactorEnabled
                 || user.TwoFactorSecretProtected is null
@@ -36,6 +38,7 @@ public static class VerifyRegistrationEndpoint
                 return TypedResults.Unauthorized();
             }
 
+            // Verify the TOTP code and update the last used counter if successful
             var secret = totp.Unprotect(user.TwoFactorSecretProtected);
             var counter = totp.FindMatchingCounter(secret, request.Code);
             if (counter is null)
@@ -43,6 +46,7 @@ public static class VerifyRegistrationEndpoint
                 return TypedResults.Unauthorized();
             }
 
+            // Update the last used TOTP counter in the database, but only if it is greater than the previous one
             var updated = await db.Users
                 .Where(candidate => candidate.Id == user.Id
                     && !candidate.TwoFactorEnabled
