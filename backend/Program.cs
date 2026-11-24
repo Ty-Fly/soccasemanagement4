@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Cryptography;
 using System.Threading.RateLimiting;
 using backend.Models;
 using backend.Data;
@@ -25,6 +26,19 @@ builder.Services.AddProblemDetails();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()
     ?? throw new InvalidOperationException("JwtSettings configuration is required.");
+var usesEphemeralDevelopmentSigningKey =
+    builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(jwtSettings.SigningKey);
+
+if (usesEphemeralDevelopmentSigningKey)
+{
+    jwtSettings = new JwtSettings
+    {
+        Issuer = jwtSettings.Issuer,
+        Audience = jwtSettings.Audience,
+        SigningKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+    };
+}
+
 jwtSettings.Validate();
 builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddSingleton<JwtTokenGenerator>();
@@ -98,6 +112,12 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
+
+if (usesEphemeralDevelopmentSigningKey)
+{
+    app.Logger.LogWarning(
+        "No JWT signing key is configured. Using a temporary development key; tokens will be invalid after restart.");
+}
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();

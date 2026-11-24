@@ -10,9 +10,11 @@ six-digit code. `POST /api/login` requires that code as well as the password;
 unconfirmed accounts cannot log in. Authenticator secrets are protected with
 ASP.NET Core Data Protection, and a code cannot be reused.
 
-Configure `JwtSettings__SigningKey` as a secret environment variable with at
-least 32 UTF-8 bytes before starting the API. The issuer and audience are set
-in `appsettings.json`. Persist/share ASP.NET Core Data Protection keys across
+In Development, the API generates a temporary JWT signing key if none is
+configured; tokens from that run will be invalid after restart. Outside
+Development, configure `JwtSettings__SigningKey` as a secret environment
+variable with at least 32 UTF-8 bytes. The issuer and audience are set in
+`appsettings.json`. Persist/share ASP.NET Core Data Protection keys across
 restarts and API instances. Apply the database migration with
 `dotnet ef database update` before using registration.
 
