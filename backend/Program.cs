@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -14,6 +15,11 @@ using backend.Hubs;
 using backend.Features.Alerts;
 using backend.Services.MultiTenancy;
 using backend.Features.Cases;
+using backend.Services.Ingest;
+using backend.Features.Authentication;
+using backend.Services.Authentication;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,7 +40,24 @@ builder.Services.AddSwaggerGen(options =>
     {
         [new OpenApiSecuritySchemeReference("Bearer", document)] = []
     });
+
+    // US-xx: tweede "Authorize"-veld voor de API-key van externe bronnen
+    options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.ApiKey,
+        In = ParameterLocation.Header,
+        Name = IngestApiKeyHandler.HeaderName,
+        Description = "Voor /api/ingest. In Development: dev-ingest-klant-a of dev-ingest-klant-b."
+    });
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("ApiKey", document)] = []
+    });
 });
+
+// US-02 (Kuray): validatie van de login-DTO's en nette foutmeldingen
+builder.Services.AddValidation();
+builder.Services.AddProblemDetails();
 
 // Enums als tekst in JSON ("Containment" i.p.v. 1)
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -50,6 +73,18 @@ builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
 // Gedeelde tijdlijn voor cases
 builder.Services.AddScoped<ITimelineService, TimelineService>();
 
+// US-xx: ingest van alerts uit externe bronnen
+builder.Services.AddScoped<IIngestService, IngestService>();
+
+// US-xx: CORS voor de frontend. SignalR vanuit de browser vereist een vaste origin + AllowCredentials
+// (een wildcard * is niet toegestaan). Origin instelbaar via "Frontend:Origin" in appsettings.
+var frontendOrigin = builder.Configuration["Frontend:Origin"] ?? "http://localhost:5173";
+builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
+    .WithOrigins(frontendOrigin)
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials()));
+
 // Database verbinding
 var connectionString = builder.Configuration.GetConnectionString("Default") ??
     throw new InvalidOperationException("Connectionstring SQL is niet aanwezig. Check appsettings.json.");
@@ -60,6 +95,34 @@ builder.Services.AddDbContext<SocDbContext>(options =>
 // Authenticatie: controleert JWT-tokens, zodat RequireAuthorization werkt.
 // De echte login (wachtwoord + 2FA, tokens uitgeven) is US-02.
 var jwtSigningKey = builder.Configuration["JwtSettings:SigningKey"] ?? "";
+
+// US-02 (Kuray): login met wachtwoord + TOTP. Zelfde issuer, audience en sleutel als de
+// tokenvalidatie hieronder, zodat tokens van /api/login en /api/dev/token allebei geldig zijn.
+builder.Services.AddSingleton(new JwtSettings
+{
+    Issuer = builder.Configuration["JwtSettings:Issuer"] ?? "",
+    Audience = builder.Configuration["JwtSettings:Audience"] ?? "",
+    SigningKey = jwtSigningKey.PadRight(32)
+});
+builder.Services.AddSingleton<JwtTokenGenerator>();
+builder.Services.AddScoped<TotpAuthenticator>();
+builder.Services.AddDataProtection();
+
+// US-02: maximaal 10 login-/registratiepogingen per minuut per IP-adres
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("authentication", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
 if (jwtSigningKey.Length < 32 && !EF.IsDesignTime)
     throw new InvalidOperationException("JwtSettings:SigningKey ontbreekt of is korter dan 32 tekens. Check appsettings.Development.json.");
 
@@ -89,7 +152,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 return Task.CompletedTask;
             }
         };
-    });
+    })
+    // US-xx: tweede scheme voor externe bronnen (header X-Api-Key). JWT blijft de standaard.
+    .AddScheme<AuthenticationSchemeOptions, IngestApiKeyHandler>(IngestApiKeyHandler.SchemeName, _ => { });
 
 // RBAC Policies (US-03)
 builder.Services.AddAuthorization(options =>
@@ -106,6 +171,12 @@ builder.Services.AddAuthorization(options =>
 
     options.AddPolicy("ClientOnly", policy =>
         policy.RequireRole(nameof(User.UserRole.Client)));
+
+    // US-xx: alleen API-keys, en alleen op ingest-endpoints.
+    // Een JWT werkt hier niet, en een API-key werkt nergens anders.
+    options.AddPolicy("IngestOnly", policy => policy
+        .AddAuthenticationSchemes(IngestApiKeyHandler.SchemeName)
+        .RequireRole(IngestApiKeyHandler.Role));
 });
 
 var app = builder.Build();
@@ -116,6 +187,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 
+    // US-xx: dev-testpagina voor SignalR op /dev/signalr-test.html
+    app.UseStaticFiles();
+
     // Database bijwerken en (als die leeg is) testdata toevoegen
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<SocDbContext>();
@@ -123,6 +197,7 @@ if (app.Environment.IsDevelopment())
     {
         await db.Database.MigrateAsync();
         await DevDataSeeder.SeedAsync(db);
+        await DevDataSeeder.SeedIngestKeysAsync(db);   // US-xx
     }
     catch (Exception ex)
     {
@@ -131,6 +206,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRouting();
+app.UseCors("Frontend");   // US-xx: vóór authenticatie
+app.UseRateLimiter();      // US-02: na routing, zodat de policy per endpoint werkt
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -149,9 +227,15 @@ if (app.Environment.IsDevelopment())
 app.MapCloseAlertEndpoint();
 app.MapPromoteAlertEndpoint();
 app.MapLinkAlertEndpoints();
-app.MapGetHandoverReport();
 app.MapCreateHandoverReport();
-app.MapAssignCaseEndpoints();
-
+app.MapCreateHandoverItem();          // US-22
+app.MapGetActiveHandoverReport();     // US-22/23
+app.MapAssignCaseEndpoints();         // US-11
+app.MapCreateNationalIncidentEndpoint(); // US-10
+app.MapRegisterUserEndpoint();        // US-02
+app.MapVerifyRegistrationEndpoint();  // US-02
+app.MapLoginUserEndpoint();           // US-02
+app.MapIngestAlertEndpoint();         // US-05
+app.MapGetAlertsEndpoint();           // US-06
 
 app.Run();

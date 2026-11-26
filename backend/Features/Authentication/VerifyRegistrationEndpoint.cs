@@ -1,0 +1,71 @@
+using System.Text;
+using backend.Data;
+using backend.Dtos.Authentication.Register;
+using backend.Services.Authentication;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+
+namespace backend.Features.Authentication;
+
+public static class VerifyRegistrationEndpoint
+{
+    public static void MapVerifyRegistrationEndpoint(this IEndpointRouteBuilder app)
+    {
+        app.MapPost("/api/register/verify", async Task<Results<NoContent, UnauthorizedHttpResult>> (
+            VerifyRegistrationRequest request,
+            SocDbContext db,
+            TotpAuthenticator totp,
+            CancellationToken cancellationToken) =>
+        {
+            if (Encoding.UTF8.GetByteCount(request.Password) > 72)
+            {
+                return TypedResults.Unauthorized();
+            }
+
+            // Cleans up email (NFR-01) and looks up the user in the database
+            var email = AuthenticationEndpointHelpers.NormalizeEmail(request.Email);
+            var user = await db.Users.SingleOrDefaultAsync(
+                candidate => candidate.Email == email,
+                cancellationToken);
+
+            // if anything goes wrong, the user should not be able to log in, so we return "Unauthorized"
+            if (user is null
+                || user.TwoFactorEnabled
+                || user.TwoFactorSecretProtected is null
+                || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            {
+                return TypedResults.Unauthorized();
+            }
+
+            // Verify the TOTP code and update the last used counter if successful
+            var secret = totp.Unprotect(user.TwoFactorSecretProtected);
+            var counter = totp.FindMatchingCounter(secret, request.Code);
+            if (counter is null)
+            {
+                return TypedResults.Unauthorized();
+            }
+
+            // Update the last used TOTP counter in the database, but only if it is greater than the previous one
+            var updated = await db.Users
+                .Where(candidate => candidate.Id == user.Id
+                    && !candidate.TwoFactorEnabled
+                    && candidate.LastTwoFactorCounter < counter.Value)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(candidate => candidate.TwoFactorEnabled, true)
+                        .SetProperty(candidate => candidate.LastTwoFactorCounter, counter.Value),
+                    cancellationToken);
+
+            return updated == 1
+                ? TypedResults.NoContent()
+                : TypedResults.Unauthorized();
+        })
+        .WithName("VerifyRegistration")
+        .WithSummary("Confirm authenticator setup")
+        .WithDescription("Enables two-factor authentication after verifying the password and authenticator code.")
+        .Produces(StatusCodes.Status204NoContent)
+        .ProducesProblem(StatusCodes.Status401Unauthorized)
+        .RequireRateLimiting("authentication");
+    }
+}

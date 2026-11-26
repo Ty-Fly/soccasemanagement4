@@ -13,4 +13,6 @@ public sealed class HandoverReport
     public required string Content { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    public ICollection<HandoverItem> Items { get; set; } = new List<HandoverItem>();
 }
